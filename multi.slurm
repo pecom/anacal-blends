@@ -13,5 +13,5 @@ module load conda
 conda activate /pscratch/sd/p/pecom/envs/anacal_mpi
 
 cd /global/homes/p/pecom/anacal_scripts/
-srun --mpi=pmix -n 1024 python binned_shear.py -m 3 -b g
-srun --mpi=pmix -n 1024 python binned_shear.py -m 1 -b g
+srun --mpi=pmix -n 1024 python multiband_shear.py -m 3 -b g
+srun --mpi=pmix -n 1024 python multiband_shear.py -m 1 -b g
