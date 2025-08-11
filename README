@@ -1,0 +1,8 @@
+conda activate /pscratch/sd/p/pecom/envs/anacal_mpi
+
+constant_shear.py -- Apply a constant shear to all objects
+	Uses const.slurm 
+binned_shear.py -- Apply a shear in bins [0, 1, 20]
+	Uses bin.slurm 
+multiband_shear.py -- Apply a shear in bins [0, 1, 20] to a specific band. Requires catalog from `binned_shear.py` 
+	Uses multi.slurm 
