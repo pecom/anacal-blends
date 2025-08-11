@@ -193,5 +193,5 @@ for i in range(N):
     force_cat = Table(renamed)
     output_name = f"{output_dir}/{band}catalog_{sim_seed}.fits"
     print(f"Writing to {output_name}")
-    # force_cat.write(output_name, format='fits', overwrite=True)
+    force_cat.write(output_name, format='fits', overwrite=True)
 
