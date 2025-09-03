@@ -13,10 +13,12 @@ hdir = os.getenv("HOME")
 pdir = os.getenv("PSCRATCH")
 
 
-def eR_fromcatalog(catalog, clean=False):
-    if clean:
-        clean_filt = np.logical_and(np.abs(catalog["fpfs_e1"]) < 0.3, np.abs(catalog["fpfs_e2"]) < 0.3)
-        catalog = catalog[clean_filt]
+def eR_fromcatalog(cat, unrec=None):
+    if unrec is None:
+        catalog = cat
+    else: 
+        catalog = cat[unrec]
+
     e1 = np.sum(catalog["wsel"] * catalog["fpfs_e1"])
     de1_dg1 = np.sum(catalog["dwsel_dg1"] * catalog["fpfs_e1"] + catalog["wsel"] * catalog["fpfs_de1_dg1"])
 
@@ -40,11 +42,21 @@ def load_matched_catalogs(f_lambda, Ns, ddir='/pscratch/sd/p/pecom/anacal_blends
             print(f"On {j} {i} out of {N} for process {rank}")
         file_name = f_lambda(i)
 
+        # unrec_blends_const0 = Table.read(ddir + f'unrec/catalogs_constant0_{i}_unrec.pq')
+        # unrec_filt_const0 = np.array(unrec_blends_const0['blend_diff'] < 1)
+        # unrec_blends_const1 = Table.read(ddir + f'unrec/catalogs_constant1_{i}_unrec.pq')
+        # unrec_filt_const1 = np.array(unrec_blends_const1['blend_diff'] < 1)
+
+        unrec_blends_const0 = np.load(f'{pdir}/anacal_blends/unrec/catalogs_constant0_{i}_unrec_prelensed.npy')
+        unrec_filt_const0 = (unrec_blends_const0 == 0)
+        unrec_blends_const1 = np.load(f'{pdir}/anacal_blends/unrec/catalogs_constant1_{i}_unrec_prelensed.npy')
+        unrec_filt_const1 = (unrec_blends_const1 == 0)
+
         mode0_catalog = Table.read(ddir + "catalogs_constant0/" + file_name)
         mode1_catalog = Table.read(ddir + "catalogs_constant1/" + file_name)
 
-        mode0_values = eR_fromcatalog(mode0_catalog, clean=False)
-        mode1_values = eR_fromcatalog(mode1_catalog, clean=False)
+        mode0_values = eR_fromcatalog(mode0_catalog, unrec=unrec_filt_const0)
+        mode1_values = eR_fromcatalog(mode1_catalog, unrec=unrec_filt_const1)
 
         mode0_e1s[j] = mode0_values[0]
         mode1_e1s[j] = mode1_values[0]
@@ -75,11 +87,12 @@ def get_ms(e1_0, e1_1, R1_0, R1_1):
 
 send_ndxs = None
 if rank==0:
-    full_catalogs = os.listdir('/pscratch/sd/p/pecom/anacal_blends/catalogs_constant0')
-    const_ndxs0 = [int(k[8:-5]) for k in full_catalogs if not 'old' in k]
-    full_catalogs = os.listdir('/pscratch/sd/p/pecom/anacal_blends/catalogs_constant1')
-    const_ndxs1 = [int(k[8:-5]) for k in full_catalogs if not 'old' in k]
-    const_ndxs = np.intersect1d(const_ndxs0, const_ndxs1)
+    # full_catalogs = os.listdir('/pscratch/sd/p/pecom/anacal_blends/catalogs_constant0')
+    # const_ndxs0 = [int(k[8:-5]) for k in full_catalogs if not 'old' in k]
+    # full_catalogs = os.listdir('/pscratch/sd/p/pecom/anacal_blends/catalogs_constant1')
+    # const_ndxs1 = [int(k[8:-5]) for k in full_catalogs if not 'old' in k]
+    # const_ndxs = np.intersect1d(const_ndxs0, const_ndxs1)
+    const_ndxs = np.arange(40960)
     split_ndxs = np.array_split(const_ndxs, size)
 else:
     split_ndxs = None
@@ -100,5 +113,5 @@ if rank==0:
     matched_proper = np.zeros((4, len(const_ndxs)))
     for i in range(4):
         matched_proper[i] = np.concatenate([mcp[i] for mcp in matched_const])
-    np.save(f'{hdir}/anacal_scripts/data/matched_const.npy', matched_proper)
+    np.save(f'{hdir}/anacal_scripts/data/matched_const_unrec_prelensed.npy', matched_proper)
     print(matched_proper)

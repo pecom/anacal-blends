@@ -11,6 +11,8 @@ parser.add_argument("-z", "--zbin",)
 args = parser.parse_args()
 zbin = int(args.zbin)
 
+rng = np.random.default_rng()
+
 comm = MPI.COMM_WORLD
 size = comm.Get_size()
 rank = comm.Get_rank()
@@ -50,6 +52,26 @@ def eR_fromcatalog_zbin(catalog, z_bin=0, clean=False):
 
     return e1, e2, de1_dg1, de2_dg2
 
+def eR_fromcatalog_zbin_unrec(catalog, unrec_filt, z_bin=0):
+    # z_bin = 1 --> Only getting shears from objects in [0,1]
+    # z_bin = 2 --> Only getting shears from objects in [1,20]
+
+    if z_bin==1:
+        z_filt = np.logical_and(catalog['redshift'] > 0, catalog['redshift'] < 1)
+    elif z_bin==2:
+        z_filt = np.logical_and(catalog['redshift'] > 1, catalog['redshift'] < 20)
+
+    total_filt = np.logical_and(z_filt, unrec_filt)
+    filt_cat = catalog[total_filt]
+
+    e1 = np.sum(filt_cat["wsel"] * filt_cat["fpfs_e1"])
+    de1_dg1 = np.sum(filt_cat["dwsel_dg1"] * filt_cat["fpfs_e1"] + filt_cat["wsel"] * filt_cat["fpfs_de1_dg1"])
+
+    e2 = np.sum(filt_cat["wsel"] * filt_cat["fpfs_e2"])
+    de2_dg2 = np.sum(filt_cat["dwsel_dg2"] * filt_cat["fpfs_e2"] + filt_cat["wsel"] * filt_cat["fpfs_de2_dg2"])
+
+    return e1, e2, de1_dg1, de2_dg2
+
 def load_matched_catalogs_zs(f_lambda, Ns, ddir='/pscratch/sd/p/pecom/anacal_blends/',
                              bin_dir_name='catalogs_bin', bin_num=1, const_dir_name='catalogs_constant0'):
 
@@ -63,13 +85,31 @@ def load_matched_catalogs_zs(f_lambda, Ns, ddir='/pscratch/sd/p/pecom/anacal_ble
         print(f"On {j} {i} out of {N} for process {rank}")
         file_name = f_lambda(i)
 
+        # unrec_blends_bin = Table.read(ddir + f'unrec/{bin_dir_name}{bin_num}_{i}_unrec.pq')
+        # unrec_filt_bin = np.array(unrec_blends_bin['blend_diff'] < 1)
+        # unrec_blends_const = Table.read(ddir + f'unrec/{const_dir_name}_{i}_unrec.pq')
+        # unrec_filt_const = np.array(unrec_blends_const['blend_diff'] < 1)
+
+        # Nt = len(unrec_blends_bin)
+        # random_throw = rng.integers(0, Nt, 10)
+        # unrec_filt_bin = np.ones(Nt)
+        # unrec_filt_bin[random_throw] = 0
+
+        unrec_blends_bin = np.load(f'{pdir}/anacal_blends/unrec/{bin_dir_name}{bin_num}_{i}_unrec_prelensed_multi.npy')
+        unrec_filt_bin = (unrec_blends_bin == 0)
+        unrec_blends_const = np.load(f'{pdir}/anacal_blends/unrec/{const_dir_name}_{i}_unrec_prelensed_multi_bin{bin_num}.npy')
+        unrec_filt_const = (unrec_blends_const == 0)
+
         zbin_catalog = Table.read(ddir + bin_dir_name + str(bin_num) + "/" + file_name)
         const_catalog = Table.read(ddir + const_dir_name + "/" + file_name) 
 
-        mode0_values = eR_fromcatalog(const_catalog, clean=False)
-        mode1_values = eR_fromcatalog(zbin_catalog, clean=False)
-        # mode0_values = eR_fromcatalog_zbin(const_catalog,clean=False, z_bin=bin_num)
-        # mode1_values = eR_fromcatalog_zbin(zbin_catalog, clean=False, z_bin=bin_num)
+        # mode0_values = eR_fromcatalog(const_catalog, clean=False)
+        # mode1_values = eR_fromcatalog(zbin_catalog, clean=False)
+#        mode0_values = eR_fromcatalog_zbin(const_catalog, z_bin=bin_num)
+#        mode1_values = eR_fromcatalog_zbin(zbin_catalog, z_bin=bin_num)
+
+        mode0_values = eR_fromcatalog_zbin_unrec(const_catalog, unrec_filt_const, z_bin=bin_num)
+        mode1_values = eR_fromcatalog_zbin_unrec(zbin_catalog, unrec_filt_bin, z_bin=bin_num)
 
         mode0_e1s[j] = mode0_values[0]
         mode1_e1s[j] = mode1_values[0]
@@ -81,11 +121,12 @@ def load_matched_catalogs_zs(f_lambda, Ns, ddir='/pscratch/sd/p/pecom/anacal_ble
 
 send_ndxs = None
 if rank==0:
-    full_catalogs = os.listdir('/pscratch/sd/p/pecom/anacal_blends/catalogs_constant0')
-    const_ndxs0 = [int(k[8:-5]) for k in full_catalogs if not 'old' in k]
-    full_catalogs = os.listdir('/pscratch/sd/p/pecom/anacal_blends/catalogs_bin1')
-    const_ndxs1 = [int(k[8:-5]) for k in full_catalogs if not 'old' in k]
-    const_ndxs = np.intersect1d(const_ndxs0, const_ndxs1)
+    # full_catalogs = os.listdir('/pscratch/sd/p/pecom/anacal_blends/catalogs_constant0')
+    # const_ndxs0 = [int(k[8:-5]) for k in full_catalogs if not 'old' in k]
+    # full_catalogs = os.listdir('/pscratch/sd/p/pecom/anacal_blends/catalogs_bin1')
+    # const_ndxs1 = [int(k[8:-5]) for k in full_catalogs if not 'old' in k]
+    # const_ndxs = np.intersect1d(const_ndxs0, const_ndxs1)
+    const_ndxs = np.arange(40960)
     print(f"Looking at {len(const_ndxs)} matched simulations")
     split_ndxs = np.array_split(const_ndxs, size)
 else:
@@ -107,5 +148,5 @@ if rank==0:
     matched_proper = np.zeros((4, len(const_ndxs)))
     for i in range(4):
         matched_proper[i] = np.concatenate([mcp[i] for mcp in matched_const])
-    np.save(f'{hdir}/anacal_scripts/data/matched_redshift_bin{zbin}_all.npy', matched_proper)
+    np.save(f'{hdir}/anacal_scripts/data/matched_redshift_bin{zbin}_prelensed.npy', matched_proper)
     print(matched_proper)
