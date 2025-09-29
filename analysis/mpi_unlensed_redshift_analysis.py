@@ -8,13 +8,15 @@ import argparse
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-z", "--zbin")
-parser.add_argument("-p", "--pix")
+parser.add_argument("-u", "--unrec", action='store_true')
 parser.add_argument("-t", "--test", action='store_true')
+parser.add_argument("-p", "--pixel", type=int)
 
 args = parser.parse_args()
 zbin = int(args.zbin)
-npix = int(args.pix)
 test = args.test
+unrec= args.unrec
+pix = int(args.pixel)
 
 rng = np.random.default_rng()
 
@@ -68,7 +70,7 @@ def eR_fromcatalog_zbin_unrec(catalog, unrec_filt, z_bin=0):
 
     total_filt = np.logical_and(z_filt, unrec_filt)
     filt_cat = catalog[total_filt]
-    print(f'Looking at {len(filt_cat)} objects')
+    # print(f'Looking at {len(filt_cat)} objects')
 
     e1 = np.sum(filt_cat["wsel"] * filt_cat["fpfs_e1"])
     de1_dg1 = np.sum(filt_cat["dwsel_dg1"] * filt_cat["fpfs_e1"] + filt_cat["wsel"] * filt_cat["fpfs_de1_dg1"])
@@ -78,7 +80,7 @@ def eR_fromcatalog_zbin_unrec(catalog, unrec_filt, z_bin=0):
 
     return e1, e2, de1_dg1, de2_dg2
 
-def load_matched_catalogs_zs(f_lambda, Ns, ddir='/pscratch/sd/p/pecom/anacal_blends/',
+def load_matched_catalogs_zs(f_lambda, Ns, ddir='/pscratch/sd/p/pecom/anacal_blends/', load_unrec=True,
                              bin_dir_name='catalogs_bin', bin_num=1, const_dir_name='catalogs_constant0', pix=10):
 
     N = len(Ns)
@@ -91,40 +93,26 @@ def load_matched_catalogs_zs(f_lambda, Ns, ddir='/pscratch/sd/p/pecom/anacal_ble
         print(f"On {j} {i} out of {N} for process {rank}")
         file_name = f_lambda(i)
 
-        # unrec_blends_bin = Table.read(ddir + f'unrec/{bin_dir_name}{bin_num}_{i}_unrec.pq')
-        # unrec_filt_bin = np.array(unrec_blends_bin['blend_diff'] < 1)
-        # unrec_blends_const = Table.read(ddir + f'unrec/{const_dir_name}_{i}_unrec.pq')
-        # unrec_filt_const = np.array(unrec_blends_const['blend_diff'] < 1)
-
-        # Nt = len(unrec_blends_bin)
-        # random_throw = rng.integers(0, Nt, 10)
-        # unrec_filt_bin = np.ones(Nt)
-        # unrec_filt_bin[random_throw] = 0
-
         ##########################################################
         # unrec_filt is True if the object is good (not a blend) #
         ##########################################################
 
-        multiz_shear_bin = np.load(f'{pdir}/anacal_blends/unrec/{bin_dir_name}{bin_num}_{i}_unrec_lensed_multi_{pix}pix.npy')
-        unrec_filt_bin = (multiz_shear_bin < 1)
-        # print(f"We have {np.sum(unrec_filt_bin)} good objects.")
-        # multiz_shear_bin = np.load(f'{pdir}/anacal_blends/unrec/{bin_dir_name}{bin_num}_{i}_dz_max_lensed_multi.npy')
-        # unrec_filt_bin = multiz_shear_bin==0
+        zbin_catalog = Table.read(ddir + bin_dir_name + str(bin_num) +"_unlensed/" + file_name)
+        const_catalog = Table.read(ddir + const_dir_name + "_unlensed/" + file_name) 
 
-        const_shear_bin = np.load(f'{pdir}/anacal_blends/unrec/{const_dir_name}_{i}_unrec_lensed_multi_bin{bin_num}_{pix}pix.npy')
-        unrec_filt_const = np.ones(len(const_shear_bin)).astype(bool)
-        # unrec_filt_const = (const_shear_bin < 1)
-        print(f"We have {np.sum(unrec_filt_const)} good objects.")
-        # const_shear_bin = np.load(f'{pdir}/anacal_blends/unrec/{const_dir_name}_{i}_dz_max_lensed_multi_bin{bin_num}.npy')
-        # unrec_filt_const = (const_shear_bin == 1)
+        if load_unrec:
+            multiz_shear_bin = np.load(f'{pdir}/anacal_blends/unrec/{bin_dir_name}{bin_num}_unlensed_{i}_unrec_unlensed_5pix.npy')
+            # multiz_shear_bin = np.load(f'{pdir}/anacal_blends/unrec/{bin_dir_name}{bin_num}_unlensed_{i}_unrec_prelensed_multi_unlensed_{pix}pix.npy')
+            unrec_filt_bin = (multiz_shear_bin < 1)
 
-        zbin_catalog = Table.read(ddir + bin_dir_name + str(bin_num) + "/" + file_name)
-        const_catalog = Table.read(ddir + const_dir_name + "/" + file_name) 
+            const_shear_bin = np.load(f'{pdir}/anacal_blends/unrec/{const_dir_name}_unlensed_{i}_unrec_unlensed_5pix.npy')
+            # const_shear_bin = np.load(f'{pdir}/anacal_blends/unrec/{const_dir_name}_{i}_unrec_prelensed_multi_unlensed_bin{bin_num}_{pix}pix.npy')
+            unrec_filt_const = (const_shear_bin < 1)
+        else:
+            unrec_filt_bin = np.ones(len(zbin_catalog)).astype(bool)
+            unrec_filt_const = np.ones(len(const_catalog)).astype(bool)
 
-        # mode0_values = eR_fromcatalog(const_catalog, clean=False)
-        # mode1_values = eR_fromcatalog(zbin_catalog, clean=False)
-#        mode0_values = eR_fromcatalog_zbin(const_catalog, z_bin=bin_num)
-#        mode1_values = eR_fromcatalog_zbin(zbin_catalog, z_bin=bin_num)
+        print(f"We have {np.sum(unrec_filt_bin)} good objects.")
 
         mode0_values = eR_fromcatalog_zbin_unrec(const_catalog, unrec_filt_const, z_bin=bin_num)
         mode1_values = eR_fromcatalog_zbin_unrec(zbin_catalog, unrec_filt_bin, z_bin=bin_num)
@@ -139,11 +127,7 @@ def load_matched_catalogs_zs(f_lambda, Ns, ddir='/pscratch/sd/p/pecom/anacal_ble
 
 send_ndxs = None
 if rank==0:
-    # full_catalogs = os.listdir('/pscratch/sd/p/pecom/anacal_blends/catalogs_constant0')
-    # const_ndxs0 = [int(k[8:-5]) for k in full_catalogs if not 'old' in k]
-    # full_catalogs = os.listdir('/pscratch/sd/p/pecom/anacal_blends/catalogs_bin1')
-    # const_ndxs1 = [int(k[8:-5]) for k in full_catalogs if not 'old' in k]
-    # const_ndxs = np.intersect1d(const_ndxs0, const_ndxs1)
+
     const_ndxs = np.arange(40960)
     const_ndxs = np.arange(10240)
     if test:
@@ -158,7 +142,7 @@ split_ndxs = comm.scatter(split_ndxs, root=0)
 print(f"Looking at {len(split_ndxs)} objects at {rank}")
 
 catv1 = lambda x : f'catalog_{x}.fits'
-matched_const = load_matched_catalogs_zs(catv1, split_ndxs, bin_num=zbin, pix=npix)
+matched_const = load_matched_catalogs_zs(catv1, split_ndxs, load_unrec=unrec, bin_num=zbin, pix=pix)
 # print(f"On {rank} we have {matched_const[0]}")
 
 matched_const = comm.gather(matched_const, root=0)
@@ -170,7 +154,13 @@ if rank==0:
     for i in range(4):
         matched_proper[i] = np.concatenate([mcp[i] for mcp in matched_const])
     if test:
-        np.save(f'{hdir}/anacal_scripts/data/matched_redshift_bin{zbin}_lensed_{npix}pix_fixedconst_test.npy', matched_proper)
+        if unrec:
+            np.save(f'{hdir}/anacal_scripts/data/matched_redshift_bin{zbin}_unlensed_unrec_{pix}pix_test.npy', matched_proper)
+        else:
+            np.save(f'{hdir}/anacal_scripts/data/matched_redshift_bin{zbin}_unlensed_test.npy', matched_proper)
     else:
-        np.save(f'{hdir}/anacal_scripts/data/matched_redshift_bin{zbin}_lensed_{npix}pix_fixedconst.npy', matched_proper)
+        if unrec:
+            np.save(f'{hdir}/anacal_scripts/data/matched_redshift_bin{zbin}_unlensed_unrec_{pix}pix.npy', matched_proper)
+        else:
+            np.save(f'{hdir}/anacal_scripts/data/matched_redshift_bin{zbin}_unlensed.npy', matched_proper)
     print(matched_proper)

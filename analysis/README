@@ -1,0 +1,15 @@
+Analysis scripts:
+
+	mpi_constant_analysis.py - Analysis script for constant shear based on prelensed input positions
+	mpi_redshift_analysis.py - Analysis script for multi-redshift shear based on fixed bin lens positions
+	mpi_redshift_unrec_analysis.py - Analysis script for multi-redshift shear based on fixed bin lens positions when also removing unrecognized blends 
+
+
+Blend Labeling:
+	mpi_lensed_multi_unrec.py - Label blends by fixing one bin that has negative shear applied and finding neighbors in the other bin
+				    using the lensed coordinates in the truth catalogs
+	mpi_prelensed_multi_unrec.py - Label blends by fixing one bin that has negative shear applied and finding neighbors in the other bin
+				       using the prelensed coordinates in the fixed bin and lensed coordinates in the other both from the
+				       truth catalogs. (Bad setup!)
+	mpi_prelensed_unrec.py - Label blends by using the prelensed coordinates from the input catalogs. Works well for constant shear!
+

@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=unrec-wl         # create a short name for your job
-#SBATCH --nodes=1                # node count
+#SBATCH --nodes=2                # node count
 #SBATCH --ntasks-per-node=256
 #SBATCH --cpus-per-task=1
 #SBATCH --time=00:29:00          # total run time limit (HH:MM:SS)
@@ -17,7 +17,11 @@ conda activate /pscratch/sd/p/pecom/envs/anacal_mpi
 # export OMP_NUM_THREADS=1
 
 cd /global/homes/p/pecom/anacal_scripts/analysis/
-# srun --mpi=pmix -n 256 python mpi_prelensed_unrec.py -b 0
-# srun --mpi=pmix -n 256 python mpi_prelensed_unrec.py -b 1
-# srun --mpi=pmix -n 256 python mpi_prelensed_multi_unrec.py -b 1
-srun --mpi=pmix -n 256 python mpi_prelensed_multi_unrec.py -b 2
+
+# srun --mpi=pmix -n 256 python mpi_lensed_multi_unrec.py -b 1
+
+# srun --mpi=pmix -n 512 python mpi_lensed_multi_unrec.py -b 1 -q 1 -p 10
+# srun --mpi=pmix -n 512 python mpi_lensed_multi_unrec.py -b 2 -q 1 -p 10
+
+srun --mpi=pmix -n 512 python mpi_lensed_multi_unrec.py -b 1 -q 1 -p 9
+srun --mpi=pmix -n 512 python mpi_lensed_multi_unrec.py -b 2 -q 1 -p 9
