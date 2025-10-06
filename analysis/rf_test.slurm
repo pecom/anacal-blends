@@ -1,9 +1,9 @@
 #!/bin/bash
 #SBATCH --job-name=rf-analysis         # create a short name for your job
-#SBATCH --nodes=8                # node count
+#SBATCH --nodes=1                # node count
 #SBATCH --ntasks-per-node=256
 #SBATCH --cpus-per-task=1
-#SBATCH --time=00:29:00          # total run time limit (HH:MM:SS)
+#SBATCH --time=00:15:00          # total run time limit (HH:MM:SS)
 #SBATCH --constraint=cpu
 #SBATCH --qos=debug
 #SBATCH -o /global/homes/p/pecom/logs/anacal/rf-analysis.%A.out
@@ -27,11 +27,11 @@ cd /global/homes/p/pecom/anacal_scripts/analysis/
 # 	srun --mpi=pmix -n 2048 python mpi_rf_unrec_analysis.py -z 2 -q 1 -s $i -r
 # done
 
-for i in 0.5 0.6 0.7 0.8 0.9 
-do
-	srun --mpi=pmix -n 2048 python mpi_rf_const_analysis.py -q 1 -s $i
-	srun --mpi=pmix -n 2048 python mpi_rf_const_analysis.py -q 1 -s $i -r
-done
+srun --mpi=pmix -n 256 python mpi_rf_const_analysis.py -q 1 -s 0.8
+srun --mpi=pmix -n 256 python mpi_rf_const_analysis.py -q 1 -s 0.8 -r
+
+srun --mpi=pmix -n 256 python mpi_rf_const_analysis.py -q 1 -s 0.9
+srun --mpi=pmix -n 256 python mpi_rf_const_analysis.py -q 1 -s 0.9 -r
 
 
 # Need to run: 

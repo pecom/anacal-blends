@@ -57,17 +57,18 @@ mpi_size = MPI.COMM_WORLD.Get_size()
 hdir = os.getenv("HOME")
 pdir = os.getenv("PSCRATCH")
 
-N = 10 # How many samples should each process generate?
+N = 20 # How many samples should each process generate?
 shear_mode = int(args.mode)
 # 0: g=-0.02; 1: g=0.02; 2: g=0.00
 if shear_mode==3:
-    output_dir = f"{pdir}/anacal_blends/catalogs_bin1"
+    output_dir = f"{pdir}/anacal_blends/catalogs_bin1_unlensed"
 elif shear_mode==1:
-    output_dir = f"{pdir}/anacal_blends/catalogs_bin2"
+    output_dir = f"{pdir}/anacal_blends/catalogs_bin2_unlensed"
 else:
     print("Weird shear mode. Putting things in misc/ folder")
     output_dir = f"{pdir}/anacal_blends/misc"
 
+truth_dir = f"{pdir}/anacal_blends/truth_inputs_unlensed"
 ### SkyMap
 
 pixel_scale = 0.2
@@ -142,6 +143,10 @@ for i in range(N):
 
     outcome = sim_task.run(band="i", seed=sim_seed, boundaryBox=bbox, wcs=wcs)
 
+    truth_table = Table(outcome.outputTruthCatalog)
+    truth_output_name = f"{truth_dir}/input_catalog_{sim_seed}_i_mode{shear_mode}.fits"
+    truth_table.write(truth_output_name, format='fits', overwrite=True)
+
     seed = 50000 + sim_seed
     data = det_task.anacal.prepare_data(
         exposure=outcome.outputExposure,
@@ -177,6 +182,6 @@ for i in range(N):
     match_cat['redshift'] = redshift
     match_cat['truth_mag'] = mag_truth
 
-    output_name = f"{output_dir}/catalog_{sim_seed}_new.fits"
+    output_name = f"{output_dir}/catalog_{sim_seed}.fits"
     match_cat.write(output_name, format='fits', overwrite=True)
 

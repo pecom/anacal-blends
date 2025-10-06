@@ -1,12 +1,11 @@
 import anacal
 import numpy as np
 import matplotlib.pylab as plt
-import argparse
 
 import lsst.geom as geom
 from lsst.afw.geom import makeSkyWcs
 import fitsio
-import os, sys
+import os
 
 # LSST task to define DC2-like skymap 
 from lsst.skymap.discreteSkyMap import (
@@ -41,32 +40,20 @@ from xlens.process_pipe.match import (
     matchPipeConfig,
 )
 
-from numpy.lib import recfunctions as rfn
 
 from mpi4py import MPI
 from astropy.table import Table
-
-parser = argparse.ArgumentParser()
-parser.add_argument("-m", "--mode",)
-
-args = parser.parse_args()
-
 
 comm = MPI.COMM_WORLD
 mpi_rank = MPI.COMM_WORLD.Get_rank()
 mpi_size = MPI.COMM_WORLD.Get_size()
 
+N = 10 # How many samples should each process generate?
+shear_mode = 0 # What shear mode for this run
+# 0: g=-0.02; 1: g=0.02; 2: g=0.00
+
 hdir = os.getenv("HOME")
 pdir = os.getenv("PSCRATCH")
-
-N = 20 # How many samples should each process generate?
-shear_mode = int(args.mode)
-print(shear_mode, type(shear_mode))
-# 0: g=-0.02; 1: g=0.02; 2: g=0.00
-# output_dir = f"{pdir}/anacal_blends/catalogs_constant{shear_mode}_unlensed"
-output_dir = f"{pdir}/anacal_blends/catalogs_constant{shear_mode}"
-
-exit
 
 ### SkyMap
 
@@ -132,11 +119,38 @@ config.anacal.validate_psf = False
 # Task and preparation
 det_task = AnacalDetectPipe(config=config)
 
-cat_ref = fitsio.read('/pscratch/sd/p/pecom/anacal_blends/catsim/catsim-v4/OneDegSq.fits')
-# truth_dir = f"{pdir}/anacal_blends/truth_inputs_unlensed"
-truth_dir = f"{pdir}/anacal_blends/truth_inputs"
-
 if mpi_rank==0: print("Detection task setup")
+
+
+sendg1 = None
+sendg2 = None
+sende1 = None
+sende2 = None
+sendR1 = None
+sendR2 = None
+sendN = None
+if mpi_rank==0:
+    sendg1 = np.zeros([mpi_size, N], dtype=float)
+    sendg2 = np.zeros([mpi_size, N], dtype=float)
+    sende1 = np.zeros([mpi_size, N], dtype=float)
+    sende2 = np.zeros([mpi_size, N], dtype=float)
+    sendR1 = np.zeros([mpi_size, N], dtype=float)
+    sendR2 = np.zeros([mpi_size, N], dtype=float)
+    sendN = np.zeros([mpi_size, N], dtype=float)
+g1s = np.empty(N, dtype=float)
+g2s = np.empty(N, dtype=float)
+e1s = np.empty(N, dtype=float)
+e2s = np.empty(N, dtype=float)
+R1s = np.empty(N, dtype=float)
+R2s = np.empty(N, dtype=float)
+Ns = np.empty(N, dtype=float)
+comm.Scatter(sendg1, g1s, root=0)
+comm.Scatter(sendg2, g2s, root=0)
+comm.Scatter(sende1, e1s, root=0)
+comm.Scatter(sende2, e2s, root=0)
+comm.Scatter(sendR1, R1s, root=0)
+comm.Scatter(sendR2, R2s, root=0)
+comm.Scatter(sendN, Ns, root=0)
 
 for i in range(N):
     print(f"Process {mpi_rank} on simulation{i}")
@@ -159,26 +173,67 @@ for i in range(N):
     # Run catalog
     catalog = det_task.anacal.run(**data)
 
-    config = matchPipeConfig()
-    config.mag_zero = mag_zero
-    config.mag_max_truth = 28.0
-    match_task = matchPipe(config=config)
-    match = match_task.run(
-        skyMap=skymap,
-        tract=tract_id,
-        patch=patch_id,
-        catalog=catalog,
-        dm_catalog=None,
-        truth_catalog=outcome.outputTruthCatalog,
-    ).catalog
+    ### Shear Estimation
+
+    # Code magnitude cut and selection bias correction
+    e1 = catalog["wsel"] * catalog["fpfs_e1"]
+    de1_dg1 = catalog["dwsel_dg1"] * catalog["fpfs_e1"] + catalog["wsel"] * catalog["fpfs_de1_dg1"]
+
+    e2 = catalog["wsel"] * catalog["fpfs_e2"]
+    de2_dg2 = catalog["dwsel_dg2"] * catalog["fpfs_e2"] + catalog["wsel"] * catalog["fpfs_de2_dg2"]
+
+    cat_len = len(catalog)
+
+    g1 = np.sum(e1) / np.sum(de1_dg1)
+    g2 = np.sum(e2) / np.sum(de2_dg2)
+
+    g1s[i] = g1
+    g2s[i] = g2
+    e1s[i] = np.sum(e1)
+    e2s[i] = np.sum(e2)
+    R1s[i] = np.sum(de1_dg1)
+    R2s[i] = np.sum(de2_dg2)
+    Ns[i] = cat_len
 
 
-    redshift = cat_ref[match["truth_index"]]["redshift"]
-    mag_truth = cat_ref[match["truth_index"]]["i_ab"]
-    match_cat = Table(match)
-    match_cat['redshift'] = redshift
-    match_cat['truth_mag'] = mag_truth
+recvg1 = None
+recvg2 = None
+recve1 = None
+recve2 = None
+recvR1 = None
+recvR2 = None
+recvN = None
+if mpi_rank==0:
+    recvg1 = np.zeros([mpi_size, N], dtype=float)
+    recvg2 = np.zeros([mpi_size, N], dtype=float)
+    recve1 = np.zeros([mpi_size, N], dtype=float)
+    recve2 = np.zeros([mpi_size, N], dtype=float)
+    recvR1 = np.zeros([mpi_size, N], dtype=float)
+    recvR2 = np.zeros([mpi_size, N], dtype=float)
+    recvN = np.zeros([mpi_size, N], dtype=float)
 
-    output_name = f"{output_dir}/catalog_{sim_seed}.fits"
-    match_cat.write(output_name, format='fits', overwrite=True)
+comm.Gather(g1s, recvg1, root=0)
+comm.Gather(g2s, recvg2, root=0)
+comm.Gather(e1s, recve1, root=0)
+comm.Gather(e2s, recve2, root=0)
+comm.Gather(R1s, recvR1, root=0)
+comm.Gather(R2s, recvR2, root=0)
+comm.Gather(Ns, recvN, root=0)
+
+if mpi_rank==0:
+    print("all done!")
+    print("g1s: ", recvg1)
+    print("g1 mean: ", np.mean(recvg1))
+    print("--------------------------------------")
+    print("g2s: ", recvg2)
+    print("g2 mean: ", np.mean(recvg2))
+    print("--------------------------------------")
+
+    np.save(pdir + f'/anacal_blends/g1s_mode{shear_mode}', recvg1)
+    np.save(pdir + f'/anacal_blends/g2s_mode{shear_mode}', recvg2)
+    np.save(pdir + f'/anacal_blends/e1s_mode{shear_mode}', recve1)
+    np.save(pdir + f'/anacal_blends/e2s_mode{shear_mode}', recve2)
+    np.save(pdir + f'/anacal_blends/R1s_mode{shear_mode}', recvR1)
+    np.save(pdir + f'/anacal_blends/R2s_mode{shear_mode}', recvR2)
+    np.save(pdir + f'/anacal_blends/Ns_mode{shear_mode}', recvN)
 

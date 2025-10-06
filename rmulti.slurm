@@ -1,9 +1,9 @@
 #!/bin/bash
-#SBATCH --job-name=g-shear         # create a short name for your job
+#SBATCH --job-name=r-shear         # create a short name for your job
 #SBATCH --nodes=4                # node count
 #SBATCH --ntasks-per-node=256
 #SBATCH --cpus-per-task=1
-#SBATCH --time=01:30:00          # total run time limit (HH:MM:SS)
+#SBATCH --time=03:30:00          # total run time limit (HH:MM:SS)
 #SBATCH --constraint=cpu
 #SBATCH --qos=regular
 #SBATCH -o /global/homes/p/pecom/logs/anacal/bin.%A.out
@@ -13,5 +13,5 @@ module load conda
 conda activate /pscratch/sd/p/pecom/envs/anacal_mpi
 
 cd /global/homes/p/pecom/anacal_scripts/
-srun --mpi=pmix -n 1024 python multiband_shear.py -m 3 -b g
-# srun --mpi=pmix -n 1024 python multiband_shear.py -m 1 -b g
+srun --mpi=pmix -n 1024 python multiband_shear.py -m 3 -b r
+srun --mpi=pmix -n 1024 python multiband_shear.py -m 1 -b r

@@ -3,7 +3,7 @@
 #SBATCH --nodes=4                # node count
 #SBATCH --ntasks-per-node=256
 #SBATCH --cpus-per-task=1
-#SBATCH --time=04:00:00          # total run time limit (HH:MM:SS)
+#SBATCH --time=01:45:00          # total run time limit (HH:MM:SS)
 #SBATCH --constraint=cpu
 #SBATCH --qos=regular
 #SBATCH -o /global/homes/p/pecom/logs/anacal/const.%A.out
@@ -17,5 +17,9 @@ conda activate /pscratch/sd/p/pecom/envs/anacal_mpi
 # export OMP_NUM_THREADS=2
 
 cd /global/homes/p/pecom/anacal_scripts/
-srun --mpi=pmix -n 1024 python constant_shear.py -m 0
-srun --mpi=pmix -n 1024 python constant_shear.py -m 1
+# srun --mpi=pmix -n 1024 python constant_shear.py -m 0
+# srun --mpi=pmix -n 1024 python constant_shear.py -m 1
+
+
+srun --mpi=pmix -n 1024 python constant_multiband_shear.py -m 1 -b g
+srun --mpi=pmix -n 1024 python constant_multiband_shear.py -m 1 -b r

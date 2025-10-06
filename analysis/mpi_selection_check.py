@@ -14,14 +14,10 @@ warnings.filterwarnings("ignore")
 parser = argparse.ArgumentParser()
 parser.add_argument("-z", "--zbin", type=int)
 parser.add_argument("-q", "--quarter", type=int)
-parser.add_argument("-s", "--score", type=float)
-parser.add_argument("-r", "--random", action='store_true')
 
 args = parser.parse_args()
 zbin = int(args.zbin)
 qbin = int(args.quarter)
-score = float(args.score)
-rand = args.random
 
 hdir = os.getenv("HOME")
 pdir = os.getenv("PSCRATCH")
@@ -106,44 +102,21 @@ def get_data(seed, zbin):
 
 
 
-def score_rf(seed, zbin=1, dg1=0, dg2=0):
+def imag_cut(seed, zbin=1, dg1=0, dg2=0):
     full_data = get_data(seed, zbin)
 
     dmi_dg1 = -2.5*full_data['dflux_dg1']/(full_data['flux']*np.log(10))
     dmi_dg2 = -2.5*full_data['dflux_dg2']/(full_data['flux']*np.log(10))
 
-    dmg_dg1 = -2.5*full_data['g_dflux_dg1']/(full_data['g_flux']*np.log(10))
-    dmg_dg2 = -2.5*full_data['g_dflux_dg2']/(full_data['g_flux']*np.log(10))
-
-    dmr_dg1 = -2.5*full_data['r_dflux_dg1']/(full_data['r_flux']*np.log(10))
-    dmr_dg2 = -2.5*full_data['r_dflux_dg2']/(full_data['r_flux']*np.log(10))
-
-    dsize_dg1 = 2*(full_data['fpfs_e1']*full_data['fpfs_de1_dg1'] + full_data['fpfs_e2']*full_data['fpfs_de2_dg1'])
-    dsize_dg2 = 2*(full_data['fpfs_e1']*full_data['fpfs_de1_dg2'] + full_data['fpfs_e2']*full_data['fpfs_de2_dg2'])
 
     i_mag = 30 - 2.5*np.log10(full_data['flux'])
-    g_mag = 30 - 2.5*np.log10(full_data['g_flux'])
-    r_mag = 30 - 2.5*np.log10(full_data['r_flux'])
-    fpfs_size = full_data['fpfs_e1']**2 + full_data['fpfs_e2']**2
+    shear_imag = i_mag + dg1*dmi_dg1 + dg2*dmi_dg2
 
-    full_data['i_mag'] = i_mag + dg1*dmi_dg1 + dg2*dmi_dg2
-    full_data['g_mag'] = g_mag + dg1*dmg_dg1 + dg2*dmg_dg2
-    full_data['r_mag'] = r_mag + dg1*dmr_dg1 + dg2*dmr_dg2
-    full_data['fpfs_size'] = fpfs_size + dg1*dsize_dg1 + dg2*dsize_dg2 # Should be ellipticity
-    full_data['m2_mod'] = full_data['fpfs_m2'] + dg1*full_data['fpfs_dm2_dg1'] + dg2*full_data['fpfs_dm2_dg2'] # Should be size
-
-    # Not changing names in case it breaks things with the pre-trained RF....
-
-    rf_photom = full_data[['g_mag', 'r_mag', 'i_mag', 'fpfs_size', 'm2_mod']].as_array()
-    rf_photom = structured_to_unstructured(rf_photom)
-    probs = clf.predict_proba(rf_photom)
-    scores = probs[:,1]
-
-    return scores
+    return shear_imag
 
 def load_matched_catalogs_zs(f_lambda, Ns, ddir='/pscratch/sd/p/pecom/anacal_blends/',
                              bin_dir_name='catalogs_bin', bin_num=1,
-                             const_dir_name='catalogs_constant0', rf_threshold=0.5):
+                             const_dir_name='catalogs_constant0'):
 
     N = len(Ns)
     mode0_e1s = np.zeros(N)
@@ -159,25 +132,17 @@ def load_matched_catalogs_zs(f_lambda, Ns, ddir='/pscratch/sd/p/pecom/anacal_ble
         const_catalog = Table.read(ddir + const_dir_name + "/" + file_name) 
 
         # unrec_filt is True if the object is good (not a blend)
-        redshift_score = score_rf(i, bin_num)
-        unrec_filt_bin = redshift_score < rf_threshold
-        Nbin = len(redshift_score)
+        imags = imag_cut(i, bin_num)
+        unrec_filt_bin = imags < 24
+        Nbin = len(imags)
 
-        const_score = score_rf(i, 0)
-        unrec_filt_const = const_score < rf_threshold
-        Nconst = len(const_score)
-
-        if rand:
-            rand_cost_bin = np.sum(~unrec_filt_bin)/Nbin
-            rand_cost_const = np.sum(~unrec_filt_const)/Nconst
-            print(f"Bin cost {rand_cost_bin} | Const cost {rand_cost_const}")
-
-            unrec_filt_bin = rng.choice([0,1], size=Nbin, p=[rand_cost_bin, 1-rand_cost_bin])
-            unrec_filt_const = rng.choice([0,1], size=Nconst, p=[rand_cost_const, 1-rand_cost_const])
+        const_imags = imag_cut(i, 0)
+        unrec_filt_const = const_imags < 24
+        Nconst = len(const_imags)
 
 
-        print(f"Keeping {np.sum(unrec_filt_bin)} out of {len(unrec_filt_bin)} from {i} with random {rand}")
-        print(f"Keeping {np.sum(unrec_filt_const)} out of {len(unrec_filt_const)} from {i} with random {rand}")
+        print(f"Keeping {np.sum(unrec_filt_bin)} out of {len(unrec_filt_bin)} from {i}")
+        print(f"Keeping {np.sum(unrec_filt_const)} out of {len(unrec_filt_const)} from {i}")
 
 
         mode0_values = eR_fromcatalog_zbin_unrec(const_catalog, unrec_filt_const, z_bin=bin_num)
@@ -185,31 +150,28 @@ def load_matched_catalogs_zs(f_lambda, Ns, ddir='/pscratch/sd/p/pecom/anacal_ble
 
 
         ### Selection bias correction for binned sim:
-        if rand:
-            R1_selection = 0
-            R1_selection_const = 0
-        else:
-            delta_g = 0.02
-            
-            redshift_score_plus = score_rf(i, bin_num, dg1=delta_g, dg2=0)
-            unrec_filt_bin_plus = redshift_score_plus < rf_threshold
-            e1p, _, _, _ = eR_fromcatalog_zbin_unrec(zbin_catalog, unrec_filt_bin_plus, z_bin=bin_num)
 
-            redshift_score_minus = score_rf(i, bin_num, dg1=-1.*delta_g, dg2=0)
-            unrec_filt_bin_minus = redshift_score_minus < rf_threshold
-            e1m, _, _, _ = eR_fromcatalog_zbin_unrec(zbin_catalog, unrec_filt_bin_minus, z_bin=bin_num)
+        delta_g = 0.02
+        
+        imag_plus = imag_cut(i, bin_num, dg1=delta_g, dg2=0)
+        unrec_filt_bin_plus = imag_plus < 24
+        e1p, _, _, _ = eR_fromcatalog_zbin_unrec(zbin_catalog, unrec_filt_bin_plus, z_bin=bin_num)
 
-            R1_selection = (e1p - e1m)/(2.0 * delta_g)
+        imag_minus = imag_cut(i, bin_num, dg1=-1.*delta_g, dg2=0)
+        unrec_filt_bin_minus = imag_minus < 24
+        e1m, _, _, _ = eR_fromcatalog_zbin_unrec(zbin_catalog, unrec_filt_bin_minus, z_bin=bin_num)
 
-            const_score_plus = score_rf(i, 0, dg1=delta_g, dg2=0)
-            unrec_filt_const_plus = const_score_plus < rf_threshold
-            e1p, _, _, _ = eR_fromcatalog_zbin_unrec(const_catalog, unrec_filt_const_plus, z_bin=bin_num)
+        R1_selection = (e1p - e1m)/(2.0 * delta_g)
 
-            const_score_minus = score_rf(i, 0, dg1=-1.*delta_g, dg2=0)
-            unrec_filt_const_minus = const_score_minus < rf_threshold
-            e1m, _, _, _ = eR_fromcatalog_zbin_unrec(const_catalog, unrec_filt_const_minus, z_bin=bin_num)
+        const_plus = imag_cut(i, 0, dg1=delta_g, dg2=0)
+        unrec_filt_const_plus = const_plus < 24
+        e1p, _, _, _ = eR_fromcatalog_zbin_unrec(const_catalog, unrec_filt_const_plus, z_bin=bin_num)
 
-            R1_selection_const = (e1p - e1m)/(2.0 * delta_g)
+        const_minus = imag_cut(i, 0, dg1=-1.*delta_g, dg2=0)
+        unrec_filt_const_minus = const_minus < 24
+        e1m, _, _, _ = eR_fromcatalog_zbin_unrec(const_catalog, unrec_filt_const_minus, z_bin=bin_num)
+
+        R1_selection_const = (e1p - e1m)/(2.0 * delta_g)
         # redshift_score_plus = score_rf(i, bin_num, dg1=0, dg2=delta_g)
         # unrec_filt_bin_plus = redshift_score_plus < rf_threshold
         # _, e2p, _, _ = eR_fromcatalog_zbin_unrec(zbin_catalog, unrec_filt_bin_plus, z_bin=bin_num)
@@ -219,6 +181,9 @@ def load_matched_catalogs_zs(f_lambda, Ns, ddir='/pscratch/sd/p/pecom/anacal_ble
         # _, e2m, _, _ = eR_fromcatalog_zbin_unrec(zbin_catalog, unrec_filt_bin_minus, z_bin=bin_num)
 
         # R2_selection = (e2p - e2m)/(2.0 * delta_g)
+
+        R1_selection = 0
+        R1_selection_const = 0
 
 
         mode0_e1s[j] = mode0_values[0]
@@ -238,7 +203,7 @@ send_ndxs = None
 if rank==0:
     match qbin:
         case 0:
-            ndxs = np.arange(10)
+            ndxs = np.arange(100)
         case 1:
             ndxs = np.arange(10240)
         case 2:
@@ -256,7 +221,7 @@ split_ndxs = comm.scatter(split_ndxs, root=0)
 print(f"Looking at {len(split_ndxs)} objects at {rank}")
 
 catv1 = lambda x : f'catalog_{x}.fits'
-matched_const = load_matched_catalogs_zs(catv1, split_ndxs, bin_num=zbin, rf_threshold=score)
+matched_const = load_matched_catalogs_zs(catv1, split_ndxs, bin_num=zbin)
 # print(f"On {rank} we have {matched_const[0]}")
 
 matched_const = comm.gather(matched_const, root=0)
@@ -267,10 +232,8 @@ if rank==0:
     matched_proper = np.zeros((4, len(ndxs)))
     for i in range(4):
         matched_proper[i] = np.concatenate([mcp[i] for mcp in matched_const])
-    if rand:
-        np.save(f'{hdir}/anacal_scripts/data/matched_redshift_bin{zbin}_lensed_RFscore{score}_rand.npy', matched_proper)
-    else:
-        np.save(f'{hdir}/anacal_scripts/data/matched_redshift_bin{zbin}_lensed_RFscore{score}.npy', matched_proper)
+
+    np.save(f'{hdir}/anacal_scripts/data/matched_imag_cut.npy', matched_proper)
     e1_0, e1_1, R1_0, R1_1 = matched_proper
     est_m = (np.sum(e1_1 - e1_0) / np.sum(R1_1 + R1_0)) / .02 - 1
     print(matched_proper)

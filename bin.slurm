@@ -6,8 +6,8 @@
 #SBATCH --time=03:30:00          # total run time limit (HH:MM:SS)
 #SBATCH --constraint=cpu
 #SBATCH --qos=regular
-#SBATCH -o /global/homes/p/pecom/logs/anacal/bin.%A.out
-#SBATCH -e /global/homes/p/pecom/logs/anacal/bin.%A.err
+#SBATCH -o /global/homes/p/pecom/logs/anacal/unlensed-bin.%A.out
+#SBATCH -e /global/homes/p/pecom/logs/anacal/unlensed-bin.%A.err
 
 module load conda
 conda activate /pscratch/sd/p/pecom/envs/anacal_mpi

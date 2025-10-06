@@ -43,7 +43,6 @@ from xlens.process_pipe.match import (
 
 from numpy.lib import recfunctions as rfn
 
-
 from mpi4py import MPI
 from astropy.table import Table
 
@@ -60,6 +59,7 @@ band_dict = {'u': 1,
              'z': 4,
              'y': 5}
 
+
 comm = MPI.COMM_WORLD
 mpi_rank = MPI.COMM_WORLD.Get_rank()
 mpi_size = MPI.COMM_WORLD.Get_size()
@@ -67,20 +67,16 @@ mpi_size = MPI.COMM_WORLD.Get_size()
 hdir = os.getenv("HOME")
 pdir = os.getenv("PSCRATCH")
 
-N = 10 # How many samples should each process generate?
+N = 20 # How many samples should each process generate?
 shear_mode = int(args.mode)
 band = args.band
 band_noise = band_dict[band]
+print(shear_mode, type(shear_mode))
 # 0: g=-0.02; 1: g=0.02; 2: g=0.00
-if shear_mode==3:
-    output_dir = f"{pdir}/anacal_blends/catalogs_bin1_unlensed"
-elif shear_mode==1:
-    output_dir = f"{pdir}/anacal_blends/catalogs_bin2_unlensed"
-else:
-    print("Weird shear mode. Putting things in misc/ folder")
-    output_dir = f"{pdir}/anacal_blends/misc"
+# output_dir = f"{pdir}/anacal_blends/catalogs_constant{shear_mode}_unlensed"
+output_dir = f"{pdir}/anacal_blends/catalogs_constant{shear_mode}"
 
-truth_dir = f"{pdir}/anacal_blends/truth_inputs"
+
 ### SkyMap
 
 pixel_scale = 0.2
@@ -110,6 +106,7 @@ skymap = DiscreteSkyMap(config)
 
 if mpi_rank==0: print("Created skymap")
 
+
 ### Image Simulation
 
 # configuration
@@ -118,9 +115,8 @@ config.survey_name = "lsst"
 config.draw_image_noise = True
 
 # 0: g=-0.02; 1: g=0.02; 2: g=0.00
-config.z_bounds = [-0.01, 1, 20.0]
+config.z_bounds = [-0.01, 20.0]
 config.mode = shear_mode
-config.noiseId  = band_noise
 
 tract_id = 0
 patch_id = 24
@@ -146,9 +142,10 @@ config.anacal.validate_psf = False
 det_task = AnacalDetectPipe(config=config)
 
 cat_ref = fitsio.read('/pscratch/sd/p/pecom/anacal_blends/catsim/catsim-v4/OneDegSq.fits')
+# truth_dir = f"{pdir}/anacal_blends/truth_inputs_unlensed"
+truth_dir = f"{pdir}/anacal_blends/truth_inputs"
 
 if mpi_rank==0: print("Detection task setup")
-
 
 config = AnacalForcePipeConfig()
 config.anacal.force_size = True
@@ -161,12 +158,12 @@ force_task = AnacalForcePipe(config=config)
 
 for i in range(N):
     print(f"Process {mpi_rank} on simulation{i}")
-    sim_seed = mpi_rank*N + i
+    sim_seed = mpi_rank*N + i 
 
     outcome = sim_task.run(band=band, seed=sim_seed, boundaryBox=bbox, wcs=wcs)
 
     truth_table = Table(outcome.outputTruthCatalog)
-    truth_output_name = f"{truth_dir}/input_catalog_{sim_seed}_{band}_mode{shear_mode}.fits"
+    truth_output_name = f"{truth_dir}/input_catalog_{sim_seed}_constant_mode{shear_mode}_band{band}.fits"
     truth_table.write(truth_output_name, format='fits', overwrite=True)
 
     # i-detection catalog
@@ -191,7 +188,5 @@ for i in range(N):
     renamed = rfn.rename_fields(cat, map_dict)
 
     force_cat = Table(renamed)
-    output_name = f"{output_dir}/{band}catalog_{sim_seed}.fits"
-    print(f"Writing to {output_name}")
+    output_name = f"{output_dir}/catalog_{sim_seed}_band{band}.fits"
     force_cat.write(output_name, format='fits', overwrite=True)
-
